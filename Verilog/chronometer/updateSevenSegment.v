@@ -1,10 +1,15 @@
+/*
+\authors Yakup Cengiz
+\date 03/22/2015
+*/
+
 module updateSevenSegment(hex_digit, seven_seg);
     
 input [3:0] hex_digit;
 output reg[6:0] seven_seg;
     
-// seg = {g,f,e,d,c,b,a};
-// 0 is on and 1 is off
+// segment = {g,f,e,d,c,b,a};
+// 0 means ON and 1 means OFF
 
 always @(hex_digit)
 begin
