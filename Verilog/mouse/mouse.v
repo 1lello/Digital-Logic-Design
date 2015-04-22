@@ -1,128 +1,135 @@
-module mouse (
-    input clk,                // Clock Input
-    input reset,              // Reset Input
-    inout ps2_clk,            // PS2 Clock, Bidirectional
-    inout ps2_dat,            // PS2 Data, Bidirectional
+module mouse(ps2data,ps2clk,clk,rst,ssdlo,ssdhi);
+inout ps2data,ps2clk;
+input clk,rst;
+output [6:0] ssdlo,ssdhi;
+reg direction_clk, direction_data, host_data,host_clk;
+reg [3:0] durum;
+reg [31:0] say,i;
+reg [8:0] data;
+reg [10:0] received_data;
 
-    input  [7:0] the_command,        // Command to send to mouse
-    input        send_command,       // Signal to send
-    output       command_was_sent,   // Signal command finished sending
-    output       error_communication_timed_out,
+updateSevenSegmentDisplay data_low(received_data[4:1],ssdlo);
+updateSevenSegmentDisplay data_high(received_data[8:5],ssdhi);
 
-    output [7:0] received_data,        // Received data
-    output       received_data_en,     // If 1 - new data has been received
-    output       start_receiving_data,
-    output       wait_for_incoming_data
-  );
+assign ps2clk=direction_clk?host_clk:1'bz;
+assign ps2data=direction_data?host_data:1'bz;
 
-  // --------------------------------------------------------------------
-  // Internal wires and registers Declarations
-  // --------------------------------------------------------------------
-  wire            ps2_clk_posedge;        // Internal Wires
-  wire            ps2_clk_negedge;
-
-  reg    [7:0]    idle_counter;            // Internal Registers
-  reg             ps2_clk_reg;
-  reg             ps2_data_reg;
-  reg             last_ps2_clk;
-
-  reg    [2:0]    ns_ps2_transceiver;        // State Machine Registers
-  reg    [2:0]    s_ps2_transceiver;
-
-  // --------------------------------------------------------------------
-  // Constant Declarations
-  // --------------------------------------------------------------------
-  localparam  PS2_STATE_0_IDLE            = 3'h0,        // states
-              PS2_STATE_1_DATA_IN         = 3'h1,
-              PS2_STATE_2_COMMAND_OUT     = 3'h2,
-              PS2_STATE_3_END_TRANSFER    = 3'h3,
-              PS2_STATE_4_END_DELAYED     = 3'h4;
-
-  // --------------------------------------------------------------------
-  // Finite State Machine(s)
-  // --------------------------------------------------------------------
-  always @(posedge clk) begin
-    if(reset == 1'b1) s_ps2_transceiver <= PS2_STATE_0_IDLE;
-    else              s_ps2_transceiver <= ns_ps2_transceiver;
-  end
-
-  always @(*) begin
-    ns_ps2_transceiver = PS2_STATE_0_IDLE;        // Defaults
-
-    case (s_ps2_transceiver)
-    PS2_STATE_0_IDLE:
-        begin
-            if((idle_counter == 8'hFF) && (send_command == 1'b1))
-                ns_ps2_transceiver = PS2_STATE_2_COMMAND_OUT;
-            else if ((ps2_data_reg == 1'b0) && (ps2_clk_posedge == 1'b1))
-                ns_ps2_transceiver = PS2_STATE_1_DATA_IN;
-            else ns_ps2_transceiver = PS2_STATE_0_IDLE;
-        end
-    PS2_STATE_1_DATA_IN:
-        begin
-            // if((received_data_en == 1'b1)  && (ps2_clk_posedge == 1'b1))
-            if((received_data_en == 1'b1))   ns_ps2_transceiver = PS2_STATE_0_IDLE;
-            else                             ns_ps2_transceiver = PS2_STATE_1_DATA_IN;
-        end
-    PS2_STATE_2_COMMAND_OUT:
-        begin
-            if((command_was_sent == 1'b1) || (error_communication_timed_out == 1'b1))
-                ns_ps2_transceiver = PS2_STATE_3_END_TRANSFER;
-            else ns_ps2_transceiver = PS2_STATE_2_COMMAND_OUT;
-        end
-    PS2_STATE_3_END_TRANSFER:
-        begin
-            if(send_command == 1'b0) ns_ps2_transceiver = PS2_STATE_0_IDLE;
-            else if((ps2_data_reg == 1'b0) && (ps2_clk_posedge == 1'b1))
-                ns_ps2_transceiver = PS2_STATE_4_END_DELAYED;
-            else ns_ps2_transceiver = PS2_STATE_3_END_TRANSFER;
-        end
-    PS2_STATE_4_END_DELAYED:
-        begin
-            if(received_data_en == 1'b1) begin
-                if(send_command == 1'b0) ns_ps2_transceiver = PS2_STATE_0_IDLE;
-                else                     ns_ps2_transceiver = PS2_STATE_3_END_TRANSFER;
-            end
-            else ns_ps2_transceiver = PS2_STATE_4_END_DELAYED;
-        end
-
-    default:
-            ns_ps2_transceiver = PS2_STATE_0_IDLE;
-    endcase
-  end
-
-  // --------------------------------------------------------------------
-  // Sequential logic
-  // --------------------------------------------------------------------
-  always @(posedge clk) begin
-    if(reset == 1'b1)     begin
-        last_ps2_clk    <= 1'b1;
-        ps2_clk_reg     <= 1'b1;
-        ps2_data_reg    <= 1'b1;
-    end
-    else begin
-        last_ps2_clk    <= ps2_clk_reg;
-        ps2_clk_reg     <= ps2_clk;
-        ps2_data_reg    <= ps2_dat;
-    end
-  end
-
-  always @(posedge clk) begin
-    if(reset == 1'b1) idle_counter <= 6'h00;
-    else if((s_ps2_transceiver == PS2_STATE_0_IDLE) && (idle_counter != 8'hFF))
-        idle_counter <= idle_counter + 6'h01;
-    else if (s_ps2_transceiver != PS2_STATE_0_IDLE)
-        idle_counter <= 6'h00;
-  end
-
-  // --------------------------------------------------------------------
-  // Combinational logic
-  // --------------------------------------------------------------------
-  assign ps2_clk_posedge = ((ps2_clk_reg == 1'b1) && (last_ps2_clk == 1'b0)) ? 1'b1 : 1'b0;
-  assign ps2_clk_negedge = ((ps2_clk_reg == 1'b0) && (last_ps2_clk == 1'b1)) ? 1'b1 : 1'b0;
-
-  assign start_receiving_data      = (s_ps2_transceiver == PS2_STATE_1_DATA_IN);
-  assign wait_for_incoming_data    = (s_ps2_transceiver == PS2_STATE_3_END_TRANSFER);
-
+always @ (posedge clk or negedge rst)
+begin
+   if (!rst)
+	begin
+	   durum=4'd1;
+		direction_clk=1'b0;
+		direction_data=1'b0;
+		say=0;
+		data[7:0]=8'hF4;
+		data[8]=^data;
+	end
+	else
+	case (durum)
+	4'd1: begin 
+	          host_clk=1'b0;
+				 direction_clk=1'b1;
+				 if (say<2500)
+				    say=say+1;
+				 else
+				 begin
+				    say=0;
+					 host_clk=1'b1;
+					 durum=4'd3;
+				 end
+				 if (say==2200)
+				 begin
+				 	 host_data=1'b0;
+				    direction_data=1'b1;
+				 end
+			 end
+//	4'd2: begin 
+//	         host_data=1'b0;
+//				direction_data=1'b1;
+//				durum=4'd3;
+//	      end
+	4'd3: begin 
+	         direction_clk=1'b0;
+				durum=4'd4;
+	      end
+	4'd4: begin 
+	         if (!ps2clk)
+				begin
+	         	durum=4'd5;
+					i=0;
+				end
+	      end
+	4'd5: begin 
+	         host_data=data[i];
+			   durum=4'd6;
+	      end			
+	4'd6: begin 
+	         if (ps2clk)
+				begin
+	         	durum=4'd7;
+				end
+	      end		
+	4'd7: begin 
+	         if (!ps2clk)
+				begin
+	         	durum=4'd8;
+				end
+	      end	
+	4'd8: begin 
+	         if (i<8)
+				begin
+	         	i=i+1;
+					durum=4'd5;
+				end
+				else
+				begin
+					i=0;
+					host_data=1'b1;
+					durum=4'd9;
+				end
+	      end	
+	4'd9: begin 
+	         direction_data=1'b0;
+				durum=4'd10;
+	      end			
+	4'd10: begin 
+	         if (!ps2data)
+				   durum=4'd11;
+	      end	
+	4'd11: begin 
+	         if (!ps2clk)
+				   durum=4'd12;
+	      end		
+	4'd12: begin 
+	         if (ps2data && ps2clk)
+				begin
+				   durum=4'd13;
+					i=0;
+				end
+	      end			
+	4'd13: begin 
+	         if (!ps2clk)
+				   durum=4'd14;
+	      end						
+	4'd14: begin
+				if (ps2clk)
+				begin
+				   if (i<11)
+					begin
+				      received_data[i]=ps2data;
+				      i=i+1;
+				      durum=4'd13;
+					end
+					if (i==11)
+					begin
+					   i=0;
+						durum=4'd12;
+					end
+				end				
+	      end		
+	default: durum=durum;	
+	endcase
+end
 
 endmodule
