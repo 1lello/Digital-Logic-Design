@@ -63,11 +63,15 @@ begin
         row = 0;
         column = 0;
     end
-    
 end
 
 assign VGA_R = (data[column] == 1'b1) ? 4'hF : 0;
 assign VGA_G = (data[column] == 1'b1) ? 4'hF : 0;
 assign VGA_B = (data[column] == 1'b1) ? 4'hF : 0;
+
+
+// assign VGA_R = (Current_X > 0) ? VGA_R_internal : 0;
+// assign VGA_G = (Current_X > 0) ? VGA_G_internal : 0;
+// assign VGA_B = (Current_X > 0) ? VGA_B_internal : 0;
 
 endmodule
