@@ -1,4 +1,9 @@
-`timescale 1 ps / 1 ps
+/*
+\authors Yakup Cengiz
+\date 05/02/2015
+*/
+
+//`timescale 1 ps / 1 ps
 
 module clk_div(clk, outClk);
 
