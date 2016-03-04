@@ -1,0 +1,10 @@
+
+// assign LED = data_x[7:0];
+// assign LED[0] = ledStatus;
+// assign LED[0] = KEY[0]; // normally ON
+
+reg ledStatus;
+always@(posedge KEY[0])
+begin
+    ledStatus = ~LED[0];
+end
